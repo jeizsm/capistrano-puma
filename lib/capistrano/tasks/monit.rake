@@ -3,11 +3,26 @@ namespace :load do
     set :puma_monit_conf_dir, -> { "/etc/monit/conf.d/#{puma_monit_service_name}.conf" }
     set :puma_monit_use_sudo, true
     set :puma_monit_bin, '/usr/bin/monit'
+    set :puma_monit_default_hooks, -> { true }
+  end
+end
+
+namespace :deploy do
+  before :starting, :check_puma_monit_hooks do
+    if fetch(:puma_default_hooks) && fetch(:puma_monit_default_hooks)
+      invoke 'puma:monit:add_default_hooks'
+    end
   end
 end
 
 namespace :puma do
   namespace :monit do
+
+    task :add_default_hooks do
+      before 'deploy:updating', 'puma:monit:unmonitor'
+      after 'deploy:published', 'puma:monit:monitor'
+    end
+
     desc 'Config Puma monit-service'
     task :config do
       on roles(fetch(:puma_role)) do |role|
@@ -61,9 +76,6 @@ namespace :puma do
         sudo_if_needed "#{fetch(:puma_monit_bin)} restart #{puma_monit_service_name}"
       end
     end
-
-    before 'deploy:updating', 'puma:monit:unmonitor'
-    after 'deploy:published', 'puma:monit:monitor'
 
     def puma_monit_service_name
       fetch(:puma_monit_service_name, "puma_#{fetch(:application)}_#{fetch(:stage)}")
